@@ -1,0 +1,8 @@
+# Local launcher / editor artifacts
+*.log
+.DS_Store
+Thumbs.db
+
+# The bundled BGM files are optional at runtime and exceed GitHub's 100 MiB
+# per-file limit. Host them elsewhere or replace them with smaller web assets.
+assets/audio/bgm/*.mp3

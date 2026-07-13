@@ -1,0 +1,954 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#f5e6c8">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <link rel="icon" href="data:,">
+  <title>ピアノ音当てゲーム</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- ===== 音声有効化オーバーレイ ===== -->
+  <div id="audio-overlay" class="overlay">
+    <div class="overlay-content">
+      <div class="overlay-icon">🎹</div>
+      <h1 class="overlay-title">ピアノ音当てゲーム</h1>
+      <p class="overlay-description">ピアノの音を聴いて、正しい鍵盤を当てよう！</p>
+      <button id="audio-init-btn" class="btn btn-primary btn-large">音声を有効にして開始</button>
+      <p class="overlay-note">※ブラウザの自動再生制限のため、ボタンを押して音声を有効にしてください</p>
+    </div>
+  </div>
+
+  <!-- ===== エラー通知領域 ===== -->
+  <div id="error-notification" class="error-notification" role="alert" aria-live="polite" hidden>
+    <div class="error-notification-inner">
+      <span id="error-message" class="error-message"></span>
+      <button id="error-dismiss" class="btn-icon" aria-label="エラーを閉じる">✕</button>
+    </div>
+  </div>
+
+  <!-- ===== アプリケーションコンテナ ===== -->
+  <div id="app" hidden>
+
+    <!-- ========== ホーム画面 ========== -->
+    <section id="screen-home" class="screen active" role="main" aria-label="ホーム">
+      <div class="screen-home-inner">
+        <header class="home-header">
+          <div class="home-title-area">
+            <h1 class="app-title">🎹 ピアノ音当て</h1>
+          </div>
+        </header>
+
+        <div class="home-cards">
+          <div class="audio-source-card" role="status" aria-live="polite">
+            <span id="piano-source-status" data-piano-source-status>ピアノ音源は未準備です</span>
+            <button id="piano-source-retry" class="btn btn-secondary btn-small" type="button" hidden>再読み込み</button>
+          </div>
+          <!-- ゲーム開始 -->
+          <div class="card card-primary" role="button" tabindex="0" data-screen="mode-select" aria-label="ゲームを開始">
+            <div class="card-icon">▶</div>
+            <div class="card-body">
+              <span class="card-title">ゲームを開始</span>
+              <span class="card-subtitle">モードを選んでプレイ</span>
+            </div>
+          </div>
+
+          <!-- 前回の続き -->
+          <div id="home-continue" class="card" role="button" tabindex="0" data-action="continue-session" aria-label="前回の続きを再開" hidden>
+            <div class="card-icon">⏯</div>
+            <div class="card-body">
+              <span class="card-title">続きから再開</span>
+              <span id="home-continue-info" class="card-subtitle"></span>
+            </div>
+          </div>
+
+          <!-- 復習 -->
+          <div class="card" role="button" tabindex="0" data-screen="review" aria-label="復習">
+            <div class="card-icon">📝</div>
+            <div class="card-body">
+              <span class="card-title">復習</span>
+              <span class="card-subtitle">苦手な問題を克服</span>
+            </div>
+          </div>
+
+          <!-- 成績分析 -->
+          <div class="card" role="button" tabindex="0" data-screen="analytics" aria-label="成績分析">
+            <div class="card-icon">📊</div>
+            <div class="card-body">
+              <span class="card-title">成績分析</span>
+              <span class="card-subtitle">正答率や傾向</span>
+            </div>
+          </div>
+
+          <!-- 設定 -->
+          <div class="card" role="button" tabindex="0" data-screen="settings" aria-label="設定">
+            <div class="card-icon">⚙</div>
+            <div class="card-body">
+              <span class="card-title">設定</span>
+              <span class="card-subtitle">音量・テーマ・各種設定</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- ホーム統計 -->
+        <div class="home-stats">
+          <div class="stat-item">
+            <span class="stat-value" id="home-stats-total-sessions">0</span>
+            <span class="stat-label">プレイ回数</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-value" id="home-stats-accuracy">--%</span>
+            <span class="stat-label">正答率</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-value" id="home-stats-streak">0</span>
+            <span class="stat-label">連続チェックイン</span>
+          </div>
+        </div>
+        <!-- チェックインは主要操作の下に控えめに表示 -->
+        <div class="home-checkin-footer">
+          <div id="home-checkin-card" class="card card-accent" role="button" tabindex="0" data-screen="calendar" aria-label="今日のチェックイン">
+            <div class="card-icon">📅</div>
+            <div class="card-body">
+              <span class="card-title">今日のチェックイン</span>
+              <span id="home-checkin-status" class="card-subtitle">チェックインとカレンダー</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========== モード選択画面 ========== -->
+    <section id="screen-mode-select" class="screen" role="main" aria-label="モード選択">
+      <div class="screen-header">
+        <button class="btn-back" data-action="back" aria-label="戻る">←</button>
+        <h2 class="screen-title">モード選択</h2>
+      </div>
+      <div class="screen-body">
+        <div class="audio-source-card" role="status" aria-live="polite">
+          <span id="piano-source-status-mode" data-piano-source-status>ピアノ音源は未準備です</span>
+        </div>
+        <div class="mode-grid">
+          <div class="mode-card" data-mode="single" role="button" tabindex="0">
+            <span class="mode-icon">♪</span>
+            <span class="mode-name">単音当て</span>
+            <span class="mode-desc">1つの音を聴いて鍵盤を当てる</span>
+          </div>
+          <div class="mode-card" data-mode="pair" role="button" tabindex="0">
+            <span class="mode-icon">♫</span>
+            <span class="mode-name">2音同時当て</span>
+            <span class="mode-desc">2つの音を同時に聴いて答える</span>
+          </div>
+          <div class="mode-card" data-mode="triple" role="button" tabindex="0">
+            <span class="mode-icon">♬</span>
+            <span class="mode-name">3音同時当て</span>
+            <span class="mode-desc">3つの音を同時に聴いて答える</span>
+          </div>
+          <div class="mode-card" data-mode="interval" role="button" tabindex="0">
+            <span class="mode-icon">↕</span>
+            <span class="mode-name">音程当て</span>
+            <span class="mode-desc">2音の音程を答える</span>
+          </div>
+          <div class="mode-card" data-mode="chord" role="button" tabindex="0">
+            <span class="mode-icon">🎵</span>
+            <span class="mode-name">基本コード構成音当て</span>
+            <span class="mode-desc">コードの構成音を答える</span>
+          </div>
+          <div class="mode-card" data-mode="seventh" role="button" tabindex="0">
+            <span class="mode-icon">🎶</span>
+            <span class="mode-name">セブンスコード</span>
+            <span class="mode-desc">4和音の構成音を答える</span>
+          </div>
+          <div class="mode-card" data-mode="chord-name" role="button" tabindex="0">
+            <span class="mode-icon">🏷</span>
+            <span class="mode-name">コード名当て</span>
+            <span class="mode-desc">コード名を選択肢から選ぶ</span>
+          </div>
+          <div class="mode-card" data-mode="inversion" role="button" tabindex="0">
+            <span class="mode-icon">🔄</span>
+            <span class="mode-name">コード転回形当て</span>
+            <span class="mode-desc">転回形を識別する</span>
+          </div>
+          <div class="mode-card" data-mode="progression" role="button" tabindex="0">
+            <span class="mode-icon">➡</span>
+            <span class="mode-name">コード進行当て</span>
+            <span class="mode-desc">コード進行を聴き分ける</span>
+          </div>
+          <div class="mode-card" data-mode="mixed" role="button" tabindex="0">
+            <span class="mode-icon">🎲</span>
+            <span class="mode-name">全モード混合</span>
+            <span class="mode-desc">有効なモードからランダム</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========== セッション画面 ========== -->
+    <section id="screen-session" class="screen" role="main" aria-label="セッション">
+      <div class="screen-header">
+        <button class="btn-back" data-action="back" aria-label="戻る">←</button>
+        <div class="session-progress-info">
+          <span id="session-mode-name" class="session-mode-label">モード名</span>
+          <span id="session-progress-text" class="session-progress-text">1 / 10</span>
+        </div>
+                  <span id="session-streak" class="session-streak" hidden></span>
+          <span id="session-midi-indicator" class="session-midi-indicator" hidden>MIDI: --</span>
+      </div>
+
+      <div class="session-progress-bar">
+        <div id="session-progress-fill" class="progress-fill" style="width:0%"></div>
+      </div>
+
+      <div class="session-body">
+        <div class="session-question-area">
+          <div id="session-countdown" class="session-countdown" aria-live="assertive" hidden></div>
+          <button id="session-play-btn" class="btn btn-primary btn-play" aria-label="問題を再生">
+            <span class="play-icon">🔊</span>
+            <span>問題を聴く</span>
+          </button>
+          <div id="session-status" class="session-status"></div>
+          <div id="effects-host" class="effects-host" aria-live="polite" hidden>
+            <button id="effects-skip-btn" class="btn btn-secondary btn-small effects-skip-btn" type="button" hidden>演出をスキップ</button>
+          </div>
+        </div>
+
+        <!-- コード選択肢エリア（コード名当てモード用） -->
+        <div id="session-chord-choices" class="chord-choices" hidden></div>
+        <!-- コードルート選択肢（コード名/転回形モード用） -->
+        <div id="session-chord-root-choices" class="chord-root-choices" hidden>
+          <div class="chord-section-label">ルート音を選択</div>
+          <div id="chord-root-buttons" class="chord-btn-grid"></div>
+        </div>
+        <!-- コード種類選択肢（コード名/転回形モード用） -->
+        <div id="session-chord-type-choices" class="chord-type-choices" hidden>
+          <div class="chord-section-label">コード種類を選択</div>
+          <div id="chord-type-buttons" class="chord-btn-grid"></div>
+        </div>
+        <!-- 転回形選択肢（転回形モード用） -->
+        <div id="session-inversion-choices" class="inversion-choices" hidden>
+          <div class="chord-section-label">転回形を選択</div>
+          <div id="inversion-buttons" class="inversion-btn-grid"></div>
+        </div>
+
+        <!-- 音程選択肢エリア（音程当てモード用） -->
+        <div id="session-interval-choices" class="interval-choices" hidden></div>
+        <div id="session-selected-notes" class="selected-note-chips" aria-live="polite"></div>
+      </div>
+
+      <!-- ピアノ鍵盤コンテナ -->
+      <div class="piano-container">
+        <div class="piano-controls">
+          <button id="piano-octave-down" class="btn-icon" aria-label="オクターブ下げる">◀</button>
+          <span id="piano-range-label" class="piano-range-label">C3 - B3</span>
+          <button id="piano-octave-up" class="btn-icon" aria-label="オクターブ上げる">▶</button>
+        </div>
+        <div id="piano-keyboard" class="piano-keyboard" role="application" aria-label="ピアノ鍵盤"></div>
+        <div id="piano-mobile-label" class="piano-mobile-label" hidden></div>
+      </div>
+
+      <!-- 音声テスト（第2段階 確認用） -->
+      <div class="audio-test-buttons">
+        <button id="audio-test-single" class="btn btn-secondary btn-small">♪ 単音テスト</button>
+        <button id="audio-test-pair" class="btn btn-secondary btn-small">♫ 2音テスト</button>
+        <button id="audio-test-triad" class="btn btn-secondary btn-small">♬ 3音テスト</button>
+      </div>
+
+      <!-- セッション操作ボタン -->
+      <div class="session-actions">
+        <button id="session-clear-btn" class="btn btn-secondary" disabled>選択をクリア</button>
+        <button id="session-undo-btn" class="btn btn-secondary" disabled>1音戻す</button>
+        <button id="session-submit-btn" class="btn btn-primary" disabled>回答する</button>
+        <button id="answer-next-btn" class="btn btn-primary answer-next-btn" type="button" hidden aria-busy="false">次の問題へ</button>
+      </div>
+    </section>
+
+    <!-- ========== カレンダー画面 ========== -->
+    <section id="screen-calendar" class="screen" role="main" aria-label="カレンダー">
+      <div class="screen-header">
+        <button class="btn-back" data-action="back" aria-label="戻る">←</button>
+        <h2 class="screen-title">カレンダー</h2>
+      </div>
+      <div class="screen-body">
+        <div class="calendar-checkin">
+          <div id="calendar-today-card" class="card card-accent">
+            <div class="calendar-today-info">
+              <span id="calendar-today-date" class="calendar-today-date"></span>
+              <span id="calendar-checkin-status" class="calendar-checkin-status">未チェックイン</span>
+            </div>
+            <button id="calendar-checkin-btn" class="btn btn-primary">今日のスタンプを押す</button>
+          </div>
+        </div>
+        <div id="calendar-month-nav" class="calendar-month-nav">
+          <button id="calendar-prev" class="btn-icon" aria-label="前の月">◀</button>
+          <span id="calendar-month-label" class="calendar-month-label"></span>
+          <button id="calendar-today" class="btn btn-small" aria-label="今日へ戻る">今日</button>
+          <button id="calendar-next" class="btn-icon" aria-label="次の月">▶</button>
+        </div>
+        <div id="calendar-grid" class="calendar-grid"></div>
+        <section id="calendar-date-detail" class="calendar-date-detail" aria-live="polite" hidden></section>
+          <div id="calendar-today-code" class="calendar-today-code" hidden>
+          <h3 id="calendar-code-name" class="code-name"></h3>
+          <p id="calendar-code-type" class="code-type"></p>
+          <p id="calendar-code-notes" class="code-notes"></p>
+          <p id="calendar-code-midi" class="code-midi"></p>
+          <div id="calendar-code-keyboard" class="piano-keyboard calendar-code-keyboard" role="img" aria-label="今日のコード構成音"></div>
+          <button id="calendar-code-play" class="btn btn-secondary">コードを聴く</button>
+          <p id="calendar-trivia" class="trivia-text"></p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========== 履歴画面 ========== -->
+    <section id="screen-review" class="screen" role="main" aria-label="復習">
+      <div class="screen-header">
+        <button class="btn-back" data-action="back" aria-label="戻る">←</button>
+        <h2 class="screen-title">復習</h2>
+      </div>
+      <div class="screen-body">
+        <div id="review-content">
+          <p class="empty-state">復習できる問題がありません。セッションをプレイして間違えた問題がここに表示されます。</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========== 成績分析画面 ========== -->
+    <section id="screen-analytics" class="screen" role="main" aria-label="成績分析">
+      <div class="screen-header">
+        <button class="btn-back" data-action="back" aria-label="戻る">←</button>
+        <h2 class="screen-title">成績分析</h2>
+      </div>
+      <div class="screen-body">
+        <div class="analytics-period-filter" id="analytics-period-filter">
+          <button class="choice-btn" data-filter="7d">直近7日</button>
+          <button class="choice-btn choice-active" data-filter="30d">直近30日</button>
+          <button class="choice-btn" data-filter="all">全期間</button>
+        </div>
+        <div class="analytics-summary">
+          <div class="analytics-card">
+            <span class="analytics-value" id="analytics-total-questions">0</span>
+            <span class="analytics-label">総問題数</span>
+          </div>
+          <div class="analytics-card">
+            <span class="analytics-value" id="analytics-total-correct">0</span>
+            <span class="analytics-label">総正解数</span>
+          </div>
+          <div class="analytics-card">
+            <span class="analytics-value" id="analytics-accuracy">--%</span>
+            <span class="analytics-label">総正答率</span>
+          </div>
+          <div class="analytics-card">
+            <span class="analytics-value" id="analytics-avg-time">--</span>
+            <span class="analytics-label">平均回答時間</span>
+          </div>
+          <div class="analytics-card">
+            <span class="analytics-value" id="analytics-streak">0</span>
+            <span class="analytics-label">継続日数</span>
+          </div>
+        </div>
+        <div class="analytics-primary-grid">
+          <div id="analytics-daily-chart" class="analytics-section">
+            <h3 class="analytics-section-title">日別正答率</h3>
+            <div id="daily-chart-svg-container" style="width:100%;height:150px"></div>
+          </div>
+          <div id="analytics-mode-chart" class="analytics-section">
+            <h3 class="analytics-section-title">モード別正答率</h3>
+            <div id="mode-bar-chart-container" style="width:100%;min-height:88px"></div>
+          </div>
+        </div>
+        <div class="analytics-details-grid">
+          <div id="analytics-mode-breakdown" class="analytics-section">
+          <h3 class="analytics-section-title">モード別正答率</h3>
+          <p class="empty-state">データがありません</p>
+          </div>
+          <div id="analytics-difficulty-breakdown" class="analytics-section">
+          <h3 class="analytics-section-title">難易度別正答率</h3>
+          <p class="empty-state">データがありません</p>
+          </div>
+          <div id="analytics-note-performance" class="analytics-section">
+          <h3 class="analytics-section-title">音別成績</h3>
+          <p class="empty-state">データがありません</p>
+          </div>
+          <div id="analytics-pitch-tendency" class="analytics-section">
+          <h3 class="analytics-section-title">高低傾向</h3>
+          <p class="empty-state">データがありません</p>
+          </div>
+          <div id="analytics-confusions" class="analytics-section">
+          <h3 class="analytics-section-title">音の取り違え</h3>
+          <p class="empty-state">データがありません</p>
+          </div>
+          <div id="analytics-interval-performance" class="analytics-section">
+          <h3 class="analytics-section-title">音程別正答率</h3>
+          <p class="empty-state">データがありません</p>
+          </div>
+          <div id="analytics-chord-performance" class="analytics-section">
+          <h3 class="analytics-section-title">コード別正答率</h3>
+          <p class="empty-state">データがありません</p>
+          </div>
+          <div id="analytics-missing-notes" class="analytics-section">
+          <h3 class="analytics-section-title">不足しやすい音</h3>
+          <p class="empty-state">データがありません</p>
+          </div>
+          <div id="analytics-extra-notes" class="analytics-section">
+          <h3 class="analytics-section-title">余分に加えやすい音</h3>
+          <p class="empty-state">データがありません</p>
+          </div>
+          <div id="analytics-heatmap" class="analytics-section analytics-section-wide">
+          <h3 class="analytics-section-title">音程ヒートマップ</h3>
+          <div id="heatmap-container" class="heatmap-container"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========== 設定画面 ========== -->
+    <section id="screen-settings" class="screen" role="main" aria-label="設定">
+      <div class="screen-header">
+        <button class="btn-back" data-action="back" aria-label="戻る">←</button>
+        <h2 class="screen-title">設定</h2>
+      </div>
+      <div class="screen-body settings-scroll">
+        <!-- プロフィール -->
+        <div class="settings-section">
+          <h3 class="settings-section-title">プロフィール</h3>
+          <div class="settings-row">
+            <span class="settings-label">現在のプロフィール</span>
+            <span id="settings-current-profile" class="settings-value">デフォルト</span>
+          </div>
+          <button id="settings-profile-btn" class="btn btn-secondary btn-full">プロフィールを管理</button>
+        </div>
+
+        <!-- ゲーム設定 -->
+        <div class="settings-section">
+          <h3 class="settings-section-title">ゲーム設定</h3>
+          <div class="settings-row">
+            <span class="settings-label">音程の再生方式</span>
+            <div class="settings-choices" id="settings-intervalPlaybackType">
+              <button class="choice-btn choice-active" data-value="harmonic">同時再生</button>
+              <button class="choice-btn" data-value="melodic">順次再生</button>
+            </div>
+          </div>
+          <div class="settings-row">
+            <span class="settings-label">音程の回答方式</span>
+            <div class="settings-choices" id="settings-intervalAnswerType">
+              <button class="choice-btn choice-active" data-value="name">音程名で回答</button>
+              <button class="choice-btn" data-value="keyboard">鍵盤で回答</button>
+            </div>
+          </div>
+          <div class="settings-row">
+            <span class="settings-label">1セッションの問題数</span>
+            <div class="settings-choices" id="settings-question-count">
+              <button class="choice-btn" data-value="5">5問</button>
+              <button class="choice-btn" data-value="7">7問</button>
+              <button class="choice-btn choice-active" data-value="10">10問</button>
+            </div>
+          </div>
+          <div class="settings-row">
+            <span class="settings-label">難易度</span>
+            <div class="settings-choices" id="settings-difficulty">
+              <button class="choice-btn" data-value="beginner">初心者</button>
+              <button class="choice-btn choice-active" data-value="normal">標準</button>
+              <button class="choice-btn" data-value="advanced">上級</button>
+              <button class="choice-btn" data-value="custom">カスタム</button>
+            </div>
+          </div>
+        </div>
+        <!-- コード設定 -->
+        <div class="settings-section">
+          <h3 class="settings-section-title">コード設定</h3>
+          <div class="settings-row">
+            <span class="settings-label">オクターブ判定</span>
+            <div class="settings-choices" id="settings-chord-octave">
+              <button class="choice-btn choice-active" data-value="exact">実音高で判定</button>
+              <button class="choice-btn" data-value="pitchClass">音の種類で判定</button>
+            </div>
+          </div>
+          <div class="settings-row">
+            <span class="settings-hint">※実音高判定：コード構成音当て・セブンスコード・転回形に適用</span>
+          </div>
+          <div class="settings-row">
+            <span class="settings-hint">※音の種類判定：コード名当てに適用（オクターブを無視）</span>
+          </div>
+        </div>
+        <!-- テーマ設定 -->
+        <div class="settings-section">
+          <h3 class="settings-section-title">表示設定</h3>
+          <div class="settings-row">
+            <span class="settings-label">テーマ</span>
+            <div class="settings-choices" id="settings-theme">
+              <button class="choice-btn choice-active" data-value="cream">クリーム</button>
+              <button class="choice-btn" data-value="dark">ダーク</button>
+            </div>
+          </div>
+          <div class="settings-row">
+            <span class="settings-label">音名表示</span>
+            <div class="settings-choices" id="settings-note-label">
+              <button class="choice-btn" data-value="none">なし</button>
+              <button class="choice-btn choice-active" data-value="solfege">ドレミ</button>
+              <button class="choice-btn" data-value="english">CDE</button>
+              <button class="choice-btn" data-value="both">両方</button>
+            </div>
+          </div>
+          <div class="settings-row">
+            <span class="settings-label">音程ヒートマップ</span>
+            <div class="settings-choices" id="settings-heatmap-mode">
+              <button class="choice-btn" data-value="off">表示しない</button>
+              <button class="choice-btn choice-active" data-value="subtle">控えめ</button>
+              <button class="choice-btn" data-value="detail">詳細</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 音量設定 -->
+        <div class="settings-section">
+          <h3 class="settings-section-title">音量設定</h3>
+          <div class="settings-row settings-slider">
+            <span class="settings-label">全体音量</span>
+            <input type="range" id="volume-master" class="slider" min="0" max="100" value="80">
+            <span id="volume-master-value" class="slider-value">80%</span>
+          </div>
+          <div class="settings-row settings-slider">
+            <span class="settings-label">ピアノ音量</span>
+            <input type="range" id="volume-piano" class="slider" min="0" max="100" value="90">
+            <span id="volume-piano-value" class="slider-value">90%</span>
+          </div>
+          <div class="settings-row settings-slider">
+            <span class="settings-label">BGM音量</span>
+            <input type="range" id="volume-bgm" class="slider" min="0" max="100" value="50">
+            <span id="volume-bgm-value" class="slider-value">50%</span>
+          </div>
+          <div class="settings-row settings-slider">
+            <span class="settings-label">効果音量</span>
+            <input type="range" id="volume-sfx" class="slider" min="0" max="100" value="80">
+            <span id="volume-sfx-value" class="slider-value">80%</span>
+          </div>
+          <div class="settings-row settings-slider">
+            <span class="settings-label">拍手音量</span>
+            <input type="range" id="volume-applause" class="slider" min="0" max="100" value="70">
+            <span id="volume-applause-value" class="slider-value">70%</span>
+          </div>
+          <div class="settings-row">
+            <span class="settings-label">効果音を使用</span>
+            <label class="toggle-label">
+              <input type="checkbox" id="settings-sfx-enabled" class="toggle-input" checked>
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+
+        <!-- 演出設定 -->
+        <div class="settings-section">
+          <h3 class="settings-section-title">演出設定</h3>
+          <div class="settings-row">
+            <span class="settings-label">演出強度</span>
+            <div class="settings-choices" id="settings-effects">
+              <button class="choice-btn" data-value="none">なし</button>
+              <button class="choice-btn" data-value="subtle">弱い</button>
+              <button class="choice-btn choice-active" data-value="normal">標準</button>
+              <button class="choice-btn" data-value="flashy">派手</button>
+            </div>
+          </div>
+          <div class="settings-row">
+            <span class="settings-label">点滅軽減</span>
+            <label class="toggle-label">
+              <input type="checkbox" id="settings-reduced-blinking" class="toggle-input">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div class="settings-row">
+            <span class="settings-label">画面揺れ無効</span>
+            <label class="toggle-label">
+              <input type="checkbox" id="settings-screen-shake" class="toggle-input">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+
+        <!-- MIDI設定 -->
+        <div class="settings-section">
+          <h3 class="settings-section-title">MIDI設定</h3>
+          <div class="settings-row">
+            <span class="settings-label">MIDI入力を使用</span>
+            <label class="toggle-label">
+              <input type="checkbox" id="settings-midi-enabled" class="toggle-input">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div id="settings-midi-details" hidden>
+            <div class="settings-row">
+              <span class="settings-label">接続状態</span>
+              <span id="settings-midi-status" class="settings-value">未接続</span>
+            </div>
+            <div class="settings-row" id="settings-midi-device-row" hidden>
+              <span class="settings-label">使用機器</span>
+              <select id="settings-midi-device-select" class="settings-select"></select>
+            </div>
+            <button id="settings-midi-rescan" class="btn btn-secondary btn-small btn-full">MIDI機器を再検出</button>
+            <div class="settings-row">
+              <span class="settings-label">確定方式</span>
+              <div class="settings-choices" id="settings-midi-confirm-mode">
+                <button class="choice-btn" data-value="singleImmediate">単音即時</button>
+                <button class="choice-btn" data-value="manual">手動確定</button>
+                <button class="choice-btn" data-value="auto">自動確定</button>
+              </div>
+            </div>
+            <div class="settings-row" id="settings-midi-auto-delay-row" hidden>
+              <span class="settings-label">自動確定時間</span>
+              <div class="settings-choices" id="settings-midi-auto-delay">
+                <button class="choice-btn" data-value="300">300ms</button>
+                <button class="choice-btn choice-active" data-value="500">500ms</button>
+                <button class="choice-btn" data-value="800">800ms</button>
+                <button class="choice-btn" data-value="1000">1000ms</button>
+              </div>
+            </div>
+            <div class="settings-row">
+              <span class="settings-label">オクターブ補正</span>
+              <div class="settings-choices" id="settings-midi-octave">
+                <button class="choice-btn" data-value="-24">-2</button>
+                <button class="choice-btn" data-value="-12">-1</button>
+                <button class="choice-btn choice-active" data-value="0">0</button>
+                <button class="choice-btn" data-value="12">+1</button>
+                <button class="choice-btn" data-value="24">+2</button>
+              </div>
+            </div>
+            <div class="settings-row">
+              <span class="settings-label">画面鍵盤併用</span>
+              <label class="toggle-label">
+                <input type="checkbox" id="settings-midi-screen-keys" class="toggle-input" checked>
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+            <div class="settings-row">
+              <span class="settings-label">サステイン有効</span>
+              <label class="toggle-label">
+                <input type="checkbox" id="settings-midi-sustain" class="toggle-input">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+          <button id="settings-midi-btn" class="btn btn-secondary btn-full">MIDI接続テスト画面を開く</button>
+        </div>
+
+        <!-- 出題管理 -->
+        <div class="settings-section">
+          <h3 class="settings-section-title">出題管理</h3>
+          <div id="pool-info" class="pool-info">
+            <span id="pool-info-text" class="pool-info-text">読み込み中...</span>
+          </div>
+          <button id="settings-pool-reset" class="btn btn-secondary btn-full">出題履歴をリセット</button>
+        </div>
+
+        <!-- BGM設定 -->
+        <div class="settings-section">
+          <h3 class="settings-section-title">BGM設定</h3>
+          <div id="bgm-status" class="bgm-status" hidden>
+            <span id="bgm-status-text" class="bgm-status-text"></span>
+            <div class="bgm-status-actions">
+              <button id="bgm-reload-btn" class="btn btn-secondary btn-small">再読み込み</button>
+              <button id="bgm-reselect-btn" class="btn btn-secondary btn-small">ファイルを再選択</button>
+              <button id="bgm-disable-btn" class="btn btn-secondary btn-small">BGMなしで続ける</button>
+            </div>
+          </div>
+          <button id="settings-bgm-home" class="btn btn-secondary btn-full">ホームBGMを選択</button>
+          <button id="settings-bgm-session" class="btn btn-secondary btn-full">セッションBGMを選択</button>
+          <button id="settings-bgm-calendar" class="btn btn-secondary btn-full">カレンダーBGMを選択</button>
+        </div>
+
+        <!-- BGM有効トグル -->
+        <div class="settings-section">
+          <h3 class="settings-section-title">ミュート設定</h3>
+          <div class="settings-row">
+            <span class="settings-label">ミュート</span>
+            <label class="toggle-label">
+              <input type="checkbox" id="settings-mute-toggle" class="toggle-input">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+
+        <!-- データ管理 -->
+        <div class="settings-section">
+          <h3 class="settings-section-title">データ管理</h3>
+          <p class="settings-hint">バックアップ、復元、削除は専用のデータ管理画面で確認して実行します。</p>
+          <button id="settings-data-management" class="btn btn-secondary btn-full">データ管理画面を開く</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========== データ管理画面（第12段階） ========== -->
+    <section id="screen-data-management" class="screen" role="main" aria-label="データ管理">
+      <div class="screen-header">
+        <button class="btn-back" data-action="back" aria-label="戻る">←</button>
+        <h2 class="screen-title">データ管理</h2>
+      </div>
+      <div class="screen-body data-management-scroll">
+        <p class="data-management-lead">IndexedDBとアプリ専用のlocalStorageをバックアップ・復元します。無関係なブラウザー保存データは変更しません。</p>
+
+        <div class="data-management-section">
+          <h3 class="settings-section-title">書き出し</h3>
+          <p id="data-management-counts" class="data-management-status" aria-live="polite">件数を読み込み中…</p>
+          <button id="data-export-all" class="btn btn-primary btn-full">全プロフィールをJSON保存</button>
+          <button id="data-export-selected" class="btn btn-secondary btn-full">現在のプロフィールだけJSON保存</button>
+        </div>
+
+        <div class="data-management-section">
+          <h3 class="settings-section-title">JSON復元</h3>
+          <label class="data-file-label" for="data-import-file">バックアップJSONを選択</label>
+          <input id="data-import-file" class="data-file-input" type="file" accept=".json,application/json">
+          <p class="settings-hint">UTF-8の正式バックアップだけを選択してください。検証が終わるまで現在のデータは変更されません。</p>
+          <div id="data-validation-errors" class="data-validation-errors" role="alert" hidden></div>
+          <div id="data-restore-preview" class="data-restore-preview" hidden>
+            <h4>復元プレビュー</h4>
+            <dl id="data-preview-list" class="data-preview-list"></dl>
+            <label class="settings-label" for="data-restore-mode">復元方式</label>
+            <select id="data-restore-mode" class="settings-select">
+              <option value="add">現在のデータへ追加</option>
+              <option value="replace">現在のデータを置き換え</option>
+              <option value="new-profile">新しいプロフィールとして復元</option>
+            </select>
+            <label id="data-restore-profile-label" class="settings-label" for="data-restore-profile">復元対象プロフィール</label>
+            <select id="data-restore-profile" class="settings-select"></select>
+            <p id="data-restore-plan" class="data-management-status"></p>
+            <div class="data-management-actions">
+              <button id="data-restore-cancel" class="btn btn-secondary">プレビューを閉じる</button>
+              <button id="data-restore-execute" class="btn btn-primary">この方式で復元</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="data-management-section data-danger-section">
+          <h3 class="settings-section-title">初期化と削除</h3>
+          <p class="settings-hint">対象プロフィールを明記し、確認後に実行します。全データ削除だけは「全データ削除」の入力を含む二段階確認です。</p>
+          <button id="data-reset-settings" class="btn btn-secondary btn-full">現在プロフィールの設定だけ初期化</button>
+          <button id="data-delete-history" class="btn btn-secondary btn-full">現在プロフィールの履歴だけ削除</button>
+          <button id="data-reset-profile" class="btn btn-secondary btn-full">現在プロフィールを初期化</button>
+          <button id="data-delete-all" class="btn btn-danger btn-full">全データ削除（2段階確認）</button>
+        </div>
+
+        <p id="data-management-result" class="data-management-result" role="status" aria-live="polite"></p>
+      </div>
+    </section>
+
+    <!-- ========== MIDIテスト画面 ========== -->
+    <section id="screen-midi-test" class="screen" role="main" aria-label="MIDI接続テスト">
+      <div class="screen-header">
+        <button class="btn-back" data-action="back" aria-label="戻る">←</button>
+        <h2 class="screen-title">MIDI接続テスト</h2>
+      </div>
+      <div class="screen-body">
+        <div id="midi-status" class="midi-status">
+          <p>MIDIの状態を確認しています...</p>
+        </div>
+        <div id="midi-devices" class="midi-devices"></div>
+        <button id="midi-scan-btn" class="btn btn-secondary btn-full">MIDI機器を再検出</button>
+        <section class="midi-help-card" aria-label="MIDIの使い方">
+          <div class="midi-help-icon" aria-hidden="true">🎹</div>
+          <div class="midi-help-content">
+            <h3>画面鍵盤でも遊べます</h3>
+            <p>MIDI機器が見つからない場合も、アプリ内の鍵盤ですぐに練習できます。</p>
+            <ol>
+              <li>機器を接続して「MIDI機器を再検出」を押す</li>
+              <li>接続できない場合は画面鍵盤を使う</li>
+            </ol>
+          </div>
+        </section>
+        <div id="midi-test-area" class="midi-test-area" hidden>
+          <h3>入力テスト</h3>
+          <p>MIDIキーボードの鍵盤を押してください</p>
+          <div id="midi-note-display" class="midi-note-display">鍵盤を押すと表示されます</div>
+          <div class="midi-note-info">
+            <div class="midi-info-grid">
+              <div class="midi-info-item">
+                <span class="midi-info-label">ステータス</span>
+                <span id="midi-event-type" class="midi-info-value">--</span>
+              </div>
+              <div class="midi-info-item">
+                <span class="midi-info-label">チャンネル</span>
+                <span id="midi-channel" class="midi-info-value">--</span>
+              </div>
+              <div class="midi-info-item">
+                <span class="midi-info-label">生ノート</span>
+                <span id="midi-raw-note" class="midi-info-value">--</span>
+              </div>
+              <div class="midi-info-item">
+                <span class="midi-info-label">補正後</span>
+                <span id="midi-adjusted-note" class="midi-info-value">--</span>
+              </div>
+              <div class="midi-info-item">
+                <span class="midi-info-label">音名</span>
+                <span id="midi-note-name" class="midi-info-value">--</span>
+              </div>
+              <div class="midi-info-item">
+                <span class="midi-info-label">ベロシティ</span>
+                <span id="midi-velocity" class="midi-info-value">--</span>
+              </div>
+              <div class="midi-info-item">
+                <span class="midi-info-label">サステイン</span>
+                <span id="midi-sustain-status" class="midi-info-value">OFF</span>
+              </div>
+            </div>
+          </div>
+          <div class="midi-active-notes">
+            <h4>押下中ノート</h4>
+            <div id="midi-active-notes-list" class="midi-active-notes-list">なし</div>
+          </div>
+          <div class="midi-event-log">
+            <h4>イベントログ</h4>
+            <div id="midi-event-log-list" class="midi-event-log-list">--</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========== セッション結果画面 ========== -->
+    <section id="screen-result" class="screen" role="main" aria-label="セッション結果">
+      <div class="screen-header">
+        <h2 class="screen-title">セッション結果</h2>
+      </div>
+      <div class="screen-body">
+        <div class="result-summary">
+          <div id="result-perfect" class="result-perfect" hidden>
+            <h3 class="result-perfect-title">🎉 Perfect Session! 🎉</h3>
+          </div>
+          <div class="result-stats">
+            <div class="result-stat">
+              <span id="result-correct" class="result-stat-value">0</span>
+              <span class="result-stat-label">正解</span>
+            </div>
+            <div class="result-stat">
+              <span id="result-total" class="result-stat-value">0</span>
+              <span class="result-stat-label">問題</span>
+            </div>
+            <div class="result-stat">
+              <span id="result-accuracy" class="result-stat-value">--%</span>
+              <span class="result-stat-label">正答率</span>
+            </div>
+            <div class="result-stat">
+              <span id="result-streak" class="result-stat-value">0</span>
+              <span class="result-stat-label">最大連続正解</span>
+            </div>
+          </div>
+          <div id="result-heatmap" class="result-heatmap"></div>
+        </div>
+        <div class="result-actions">
+          <button id="result-retry-btn" class="btn btn-primary btn-full">同じ設定でもう一度</button>
+          <button id="result-review-btn" class="btn btn-secondary btn-full">間違えた問題を復習</button>
+          <p id="result-review-empty" class="empty-state" hidden>全問正解です。復習する間違いはありません。</p>
+          <button id="result-home-btn" class="btn btn-secondary btn-full">ホームへ戻る</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========== プロフィール管理画面 ========== -->
+    <section id="screen-profile" class="screen" role="main" aria-label="プロフィール管理">
+      <div class="screen-header">
+        <button class="btn-back" data-action="back" aria-label="戻る">←</button>
+        <h2 class="screen-title">プロフィール管理</h2>
+      </div>
+      <div class="screen-body">
+        <div id="profile-list" class="profile-list"></div>
+        <div id="profile-create-form" class="profile-create-form" hidden>
+          <input type="text" id="profile-name-input" class="profile-name-input" placeholder="プロフィール名を入力" maxlength="20" autocomplete="off">
+          <div class="profile-create-actions">
+            <button id="profile-create-cancel" class="btn btn-secondary">キャンセル</button>
+            <button id="profile-create-confirm" class="btn btn-primary">作成</button>
+          </div>
+        </div>
+        <button id="profile-add-btn" class="btn btn-primary btn-full">新しいプロフィールを作成</button>
+      </div>
+    </section>
+
+    <!-- ========== セッション詳細画面 ========== -->
+    <section id="screen-session-detail" class="screen" role="main" aria-label="セッション詳細">
+      <div class="screen-header">
+        <button class="btn-back" data-action="back" aria-label="戻る">←</button>
+        <h2 class="screen-title">セッション詳細</h2>
+        <button class="btn btn-secondary btn-small" data-action="home" type="button">ホーム</button>
+      </div>
+      <div class="screen-body">
+        <div id="session-detail-content"></div>
+      </div>
+    </section>
+
+  </div>
+
+  <!-- ?debugAtomicTest=1 のときだけ app.js が表示する開発用パネル -->
+  <aside id="atomic-test-panel" class="atomic-test-panel" aria-label="原子的保存テスト" hidden>
+    <h2>原子的保存テスト</h2>
+    <button id="atomic-test-run" class="btn btn-primary">テスト実行</button>
+    <pre id="atomic-test-result" aria-live="polite">未実行</pre>
+  </aside>
+
+  <!-- ?debugStage6Test=1 専用。通常アクセスでは生成・実行されない。 -->
+  <aside id="stage6-panel" class="atomic-test-panel" aria-label="第6段階検査" hidden>
+    <h2>第6段階 統合検査</h2>
+    <div class="stage5-final-actions">
+      <button id="stage6-run-all" class="btn btn-primary">全検査を実行</button>
+      <button id="stage6-cleanup" class="btn btn-secondary">テストデータ削除</button>
+    </div>
+    <pre id="stage6-result" aria-live="polite">未実行</pre>
+  </aside>
+
+  <!-- ?debugStage5Final=1 専用。通常アクセスでは生成・実行されない。 -->
+  <aside id="stage5-final-panel" class="atomic-test-panel stage5-final-panel" aria-label="第5段階最終検査" hidden>
+    <h2>第5段階 最終検査</h2>
+    <div class="stage5-final-actions">
+      <button data-stage5-run="all" class="btn btn-primary">全検査を実行</button>
+      <button data-stage5-run="restore" class="btn btn-secondary">保存復元検査</button>
+      <button data-stage5-run="profiles" class="btn btn-secondary">プロフィール分離検査</button>
+      <button data-stage5-run="shortcuts" class="btn btn-secondary">ショートカット検査</button>
+      <button id="stage5-final-cleanup" class="btn btn-secondary">テストデータ削除</button>
+      <button id="stage5-final-export" class="btn btn-secondary">結果JSONを書き出す</button>
+    </div>
+    <div id="stage5-final-inputs">
+      <input id="stage5-test-input" aria-label="検査用input" value="abc">
+      <textarea id="stage5-test-textarea" aria-label="検査用textarea">abc</textarea>
+      <select id="stage5-test-select" aria-label="検査用select"><option>abc</option><option>def</option></select>
+      <div id="stage5-test-editable" contenteditable="true" tabindex="0" aria-label="検査用contenteditable">abc</div>
+    </div>
+    <pre id="stage5-final-result" aria-live="polite">未実行</pre>
+  </aside>
+
+  <!-- ===== 保存失敗パネル ===== -->
+  <div id="save-error-panel" class="dialog-overlay" role="alert" aria-live="assertive" hidden>
+    <div class="dialog-content save-error-content">
+      <p class="dialog-message">データを保存できませんでした。ゲームは続けられますが、再起動すると進行状況が失われる可能性があります。</p>
+      <div class="dialog-actions">
+        <button id="save-error-retry" class="btn btn-primary">再保存</button>
+        <button id="save-error-backup" class="btn btn-secondary">JSONバックアップ案内</button>
+        <button id="save-error-dismiss" class="btn btn-secondary">閉じる</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 確認ダイアログ ===== -->
+  <div id="confirm-dialog" class="dialog-overlay" role="dialog" aria-modal="true" hidden>
+    <div class="dialog-content">
+      <p id="confirm-message" class="dialog-message"></p>
+      <div class="dialog-actions">
+        <button id="confirm-cancel" class="btn btn-secondary">キャンセル</button>
+        <button id="confirm-ok" class="btn btn-primary">OK</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="data-delete-confirm" class="dialog-overlay" role="dialog" aria-modal="true" aria-labelledby="data-delete-confirm-title" hidden>
+    <div class="dialog-content data-delete-dialog">
+      <h2 id="data-delete-confirm-title" class="dialog-title">全データ削除 最終確認</h2>
+      <p class="dialog-message">プロフィール、履歴、設定、チェックイン、問題プール、復習・分析データを削除します。無関係なlocalStorageは保持します。</p>
+      <label for="data-delete-confirm-text" class="settings-label">確認文字列「全データ削除」を入力</label>
+      <input id="data-delete-confirm-text" class="settings-input" type="text" autocomplete="off" spellcheck="false">
+      <p class="settings-hint">前後空白を除いた完全一致が必要です。</p>
+      <div class="dialog-actions">
+        <button id="data-delete-confirm-cancel" class="btn btn-secondary">キャンセル</button>
+        <button id="data-delete-confirm-ok" class="btn btn-danger" disabled>削除を実行</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js?v=12"></script>
+</body>
+</html>

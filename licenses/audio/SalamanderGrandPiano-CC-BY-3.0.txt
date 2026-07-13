@@ -1,0 +1,15 @@
+Salamander Grand Piano V3
+
+Author: Alexander Holm
+License: Creative Commons Attribution 3.0 Unported (CC BY 3.0)
+Source and distribution repository:
+https://github.com/sfzinstruments/SalamanderGrandPiano
+Original source listed by the author:
+https://archive.org/details/SalamanderGrandPianoV3
+License URL:
+https://creativecommons.org/licenses/by/3.0/
+
+This project redistributes selected FLAC samples from the Samples/ directory
+without changing the recordings. The selected samples are used as a
+multisampled acoustic piano instrument. This notice and the license URL are
+distributed with the samples as attribution information.
