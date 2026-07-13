@@ -3394,7 +3394,7 @@ session.perfect = !!session.completed && session.questionCount > 0 && Number(ses
       el.textContent = checkin ? `✅ ${CheckinManager.stampLabels[checkin.stamp] || '音符'} チェックイン済み` : '今日の音符スタンプを押そう';
       const card = $('home-checkin-card');
       if (card) {
-        card.setAttribute('aria-disabled', checkin ? 'true' : 'false');
+        card.setAttribute('aria-disabled', 'false');
         card.dataset.checkinComplete = checkin ? 'true' : 'false';
       }
     }
@@ -4360,7 +4360,8 @@ SessionManager.saveCurrentQuestion();this._scheduleNextTurn();
         const isT = today.getFullYear()===this.currentYear && today.getMonth()===this.currentMonth && today.getDate()===d;
         const checkin = checkins.get(ds);
         const selected = this.selectedDate === ds;
-        html += `<button type="button" class="calendar-day${isT?' today':''}${checkin?' checked':''}${selected?' selected':''}" data-date="${ds}" aria-label="${this.currentYear}年${this.currentMonth+1}月${d}日${isT?' 今日':''}${checkin?' チェックイン済み':''}" title="${ds}"><span>${d}</span>${checkin?`<span class="day-stamp">${this.stampLabels[checkin.stamp] || '♪'}</span>`:''}${isT?'<span class="day-label">今日</span>':''}${checkin?'<span class="day-label">済</span>':''}</button>`;
+        const dayLabel = isT && checkin ? '今日・済' : isT ? '今日' : checkin ? '済' : '';
+        html += `<button type="button" class="calendar-day${isT?' today':''}${checkin?' checked':''}${selected?' selected':''}" data-date="${ds}" aria-label="${this.currentYear}年${this.currentMonth+1}月${d}日${isT?' 今日':''}${checkin?' チェックイン済み':''}" title="${ds}"><span class="day-number">${d}</span>${checkin?`<span class="day-stamp">${this.stampLabels[checkin.stamp] || '♪'}</span>`:''}${dayLabel ? `<span class="day-label">${dayLabel}</span>` : ''}</button>`;
       }
       grid.innerHTML = html;
       await this.renderDateDetail(this.selectedDate);
@@ -5278,14 +5279,8 @@ SessionManager.saveCurrentQuestion();this._scheduleNextTurn();
         if (card.dataset.checkinGuard === 'checking') return;
         card.dataset.checkinGuard = 'checking';
         try {
-          const checkin = await CheckinManager.get();
-          if (!checkin) {
-            AudioSystem.playSfxTone('ui');
-            Screens.show(card.dataset.screen, {});
-          } else {
-            card.setAttribute('aria-disabled', 'true');
-            card.dataset.checkinComplete = 'true';
-          }
+          AudioSystem.playSfxTone('ui');
+          Screens.show(card.dataset.screen, {});
         } finally {
           delete card.dataset.checkinGuard;
         }
